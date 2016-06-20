@@ -1,0 +1,3 @@
+[submodule ".quicklisp-install"]
+	path = .quicklisp-install
+	url = https://github.com/html/require-quicklisp.git

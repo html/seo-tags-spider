@@ -1,0 +1,5 @@
+#!/bin/sh
+export BREAK_CHARS="\"#'(),;\`\\|!?[]{}"
+alias sb="rlwrap -b \$BREAK_CHARS sbcl"
+sb --load crawler.lisp 
+
