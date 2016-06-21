@@ -41,7 +41,7 @@
 
 (setf *cache-enabled-p* t)
 (setf *drakma-request-max-tries* 1)
-
+(setf drakma:*drakma-default-external-format* :utf-8)
 
 (load "time-estimator.lisp")
 
@@ -73,34 +73,36 @@
       (lambda (url url-parent content)
         (declare (special web-crawler::*current-queue*))
 
-        (when (zerop (mod (get-universal-time) 10))
-          (let* ((units-to-process-count (length (uniqq::qlist web-crawler::*current-queue*)))
-                 (processed-units-count (hash-table-count (uniqq::qhash web-crawler::*current-queue*)))
-                 (time-passed (- (get-universal-time) (slot-value time-estimator 'start-time)))
-                 (time-per-unit (/ time-passed processed-units-count)))
+        (ignore-errors 
+          (when (zerop (mod (get-universal-time) 10))
+            (let* ((units-to-process-count (length (uniqq::qlist web-crawler::*current-queue*)))
+                   (processed-units-count (hash-table-count (uniqq::qhash web-crawler::*current-queue*)))
+                   (time-passed (- (get-universal-time) (slot-value time-estimator 'start-time)))
+                   (time-per-unit (/ time-passed processed-units-count)))
 
-            ; Clearing screen
+              ; Clearing screen
 
-            (display-progress 
-              (/ 
-                (- processed-units-count units-to-process-count) 
-                processed-units-count))
+              (display-progress (/ (- processed-units-count units-to-process-count) processed-units-count))
 
-            (format t "До конца осталось ~A минут~%" 
-                    (float 
-                      (/ 
-                        (estimated-seconds-till-the-end 
-                          time-estimator
-                          (- processed-units-count units-to-process-count)
-                          processed-units-count)
-                        60)))
+              (format t "До конца осталось ~A минут~%" 
+                      (float 
+                        (/ 
+                          (estimated-seconds-till-the-end 
+                            time-estimator
+                            (- processed-units-count units-to-process-count)
+                            processed-units-count)
+                          60)))
 
-            (format t "Прошло ~A минут, на одну страницу идет ~A секунд~%" (float (/ time-passed 60)) (float time-per-unit))
-            (format t "Всего страниц насчитали ~A" pages-count)
+              (format t "Прошло ~A минут, на одну страницу идет ~A секунд~%" (float (/ time-passed 60)) (float time-per-unit))
+              (format t "Всего страниц насчитали ~A~%" pages-count)
 
-            (incf pages-count))))
+              (incf pages-count)))))
       :crawl-delay 0
-      :uri-filter (web-crawler:make-same-host-filter site-url)
+      :uri-filter (let ((same-host-filter (web-crawler:make-same-host-filter site-url))
+                        (skip-images-filter (web-crawler::make-skip-images-filter)))
+                    (lambda (uri)
+                      (and (funcall same-host-filter uri)
+                           (funcall skip-images-filter uri))))
       :verbose t)))
 
 (format t "You can use (calculate-site-pages-count <site-url>)")

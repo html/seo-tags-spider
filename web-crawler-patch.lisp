@@ -7,6 +7,12 @@
             (seo-spider::get-content-from-url (puri:render-uri uri nil))
             "") uri))
 
+(defmethod web-crawler::find-all-links ((obj array) &optional base)
+  "Just ignoring ability to search links on array of characters"
+  (declare (ignore obj base))
+  (when (stringp obj)
+    (call-next-method)))
+
 (defvar *current-queue*)
 ; Modification to pass queue object to 
 (defun start-crawl-with-queue-modification (uri processor &key uri-filter (crawl-delay 10) verbose)
@@ -61,4 +67,13 @@ The return value is ignored.
                        (sleep crawl-delay))
                    (skip-page () nil)))))
       queue)))
+
+(defun make-skip-images-filter ()
+  "Returns a function that takes one uri as an argument and returns
+   true if that uri is like image"
+  (let ((images-scanner (ppcre:create-scanner "(jpg|png|jpeg)$" :case-insensitive-mode t)))
+    (lambda (test)
+      (unless (ppcre:scan images-scanner (puri:render-uri test nil))
+        t))))
+
 
