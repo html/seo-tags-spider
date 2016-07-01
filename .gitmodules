@@ -4,9 +4,9 @@
 [submodule "oz-parsing-util"]
 	path = oz-parsing-util
 	url = https://gist.github.com/5283629.git
-[submodule "css-selectors"]
-	path = css-selectors
-	url = https://github.com/AccelerationNet/css-selectors.git
 [submodule "php-funcs-for-cl"]
 	path = php-funcs-for-cl
 	url = https://gist.github.com/html/4707958
+[submodule "lib/css-selectors"]
+	path = lib/css-selectors
+	url = https://github.com/AccelerationNet/css-selectors.git

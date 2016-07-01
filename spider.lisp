@@ -1,7 +1,8 @@
 (load ".quicklisp-install/require-quicklisp.lisp")
+(push (make-pathname :directory '(:relative "lib")) ql:*local-project-directories*)
 
 (ql:quickload :swank)
-(swank:create-server :dont-close t :port 4005)
+;(swank:create-server :dont-close t :port 4005)
 
 (ql:quickload :weblocks-utils)
 (ql:quickload :drakma)
@@ -11,9 +12,6 @@
 (ql:quickload :weblocks-prevalence)
 (ql:quickload :cl-web-crawler)
 
-
-
-(load "css-selectors/css-selectors.asd")
 (ql:quickload :css-selectors)
 
 (defpackage :seo-spider 
@@ -21,29 +19,21 @@
 
 (in-package :seo-spider)
 
-(export '(parsed-web-page))
+(defun load-in-current-package (p)
+  (load (merge-pathnames p (or *load-pathname* *load-truename*))))
 
-(load "oz-parsing-util/oz-parsing-util.lisp")
-(load "php-funcs-for-cl/php-functions-for-cl.lisp")
-(load "web-crawler-patch.lisp")
+(load-in-current-package "oz-parsing-util/oz-parsing-util.lisp")
+(load-in-current-package "php-funcs-for-cl/php-functions-for-cl.lisp")
+(load-in-current-package "web-crawler-patch.lisp")
 
-(defclass parsed-web-page ()
-  ((id)
-   (url :initarg :url)
-   (title)
-   (description)
-   (keywords)
-   (weight :initform 0 :accessor parsed-web-page-weight)
-   (processed-p :initform nil)))
-
-(weblocks-stores:defstore *pages-store* :prevalence (make-pathname :directory '(:relative "data")))
-(weblocks-stores:open-stores)
+;(weblocks-stores:defstore *pages-store* :prevalence (make-pathname :directory '(:relative "data")))
+;(weblocks-stores:open-stores)
 
 (setf *cache-enabled-p* t)
 (setf *drakma-request-max-tries* 1)
 (setf drakma:*drakma-default-external-format* :utf-8)
 
-(load "time-estimator.lisp")
+(load-in-current-package "time-estimator.lisp")
 
 ; see game-republic weblocks-mongo-step-by-step
 (defun display-progress (percent-completed)
@@ -68,41 +58,53 @@
   (let ((time-estimator (make-instance 'time-estimator))
         (pages-count 0))
 
-    (web-crawler::start-crawl-with-queue-modification
-      site-url
-      (lambda (url url-parent content)
-        (declare (special web-crawler::*current-queue*))
+    (flet  ((calculate-callback (url url-parent content)
+              (declare (special web-crawler::*current-queue*))
+              ; Just touching
+              (handler-bind ((flexi-streams:external-format-encoding-error
+                               #'(lambda (c)
+                                   (use-value #\@))))
+                (drakma:http-request url))
 
-        (ignore-errors 
-          (when (zerop (mod (get-universal-time) 10))
-            (let* ((units-to-process-count (length (uniqq::qlist web-crawler::*current-queue*)))
-                   (processed-units-count (hash-table-count (uniqq::qhash web-crawler::*current-queue*)))
-                   (time-passed (- (get-universal-time) (slot-value time-estimator 'start-time)))
-                   (time-per-unit (/ time-passed processed-units-count)))
+              (incf pages-count)
 
-              ; Clearing screen
+              (ignore-errors 
+                (when (zerop (mod (get-universal-time) 10))
+                  (let* ((units-to-process-count (length (uniqq::qlist web-crawler::*current-queue*)))
+                         (processed-units-count (hash-table-count (uniqq::qhash web-crawler::*current-queue*)))
+                         (time-passed (- (get-universal-time) (slot-value time-estimator 'start-time)))
+                         (time-per-unit (/ time-passed processed-units-count)))
 
-              (display-progress (/ (- processed-units-count units-to-process-count) processed-units-count))
+                    ; Clearing screen
 
-              (format t "До конца осталось ~A минут~%" 
-                      (float 
-                        (/ 
-                          (estimated-seconds-till-the-end 
-                            time-estimator
-                            (- processed-units-count units-to-process-count)
-                            processed-units-count)
-                          60)))
+                    (display-progress (/ (- processed-units-count units-to-process-count) processed-units-count))
 
-              (format t "Прошло ~A минут, на одну страницу идет ~A секунд~%" (float (/ time-passed 60)) (float time-per-unit))
-              (format t "Всего страниц насчитали ~A~%" pages-count)
+                    (format t "До конца осталось ~A минут~%" 
+                            (float 
+                              (/ 
+                                (estimated-seconds-till-the-end 
+                                  time-estimator
+                                  (- processed-units-count units-to-process-count)
+                                  processed-units-count)
+                                60)))
 
-              (incf pages-count)))))
-      :crawl-delay 0
-      :uri-filter (let ((same-host-filter (web-crawler:make-same-host-filter site-url))
-                        (skip-images-filter (web-crawler::make-skip-images-filter)))
-                    (lambda (uri)
-                      (and (funcall same-host-filter uri)
-                           (funcall skip-images-filter uri))))
-      :verbose t)))
+                    (format t "Прошло ~A минут, на одну страницу идет ~A секунд~%" (float (/ time-passed 60)) (float time-per-unit))
+                    (format t "Всего страниц насчитали ~A~%" pages-count))))))
 
-(format t "You can use (calculate-site-pages-count <site-url>)")
+      (handler-bind ((error
+                       #'(lambda (c)
+                           (format t "Skipped page, condition - ~A~%" c)
+                           (web-crawler::skip-page c))))
+        (web-crawler::start-crawl-with-queue-modification
+          site-url
+          #'calculate-callback
+          :crawl-delay 0
+          :uri-filter (let ((same-host-filter (web-crawler:make-same-host-filter site-url))
+                            (skip-images-filter (web-crawler::make-skip-images-filter)))
+                        (lambda (uri)
+                          (and (funcall same-host-filter uri)
+                               (funcall skip-images-filter uri))))
+          :verbose t)))
+    pages-count))
+
+(format t "You can use (seo-spider::calculate-site-pages-count <site-url>)")
